@@ -1,1 +1,41 @@
+{
+  "name": "seb-unblocker-v7",
+  "version": "7.0.0",
+  "description": "A professional multi-site proxy with tab system, waves UI, and Puppeteer support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "setup": "node setup.js",
+    "lint": "eslint .",
+    "test": "echo \"No tests defined\"",
+    "build": "echo \"No build step needed\""
+  },
+  "keywords": [
+    "proxy",
+    "unblocker",
+    "express",
+    "puppeteer",
+    "web"
+  ],
+  "author": "Seb",
+  "license": "MIT",
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.0.1",
+    "helmet": "^7.0.0",
+    "morgan": "^1.10.0",
+    "node-fetch": "^2.6.12",
+    "puppeteer": "^24.15.0",
+    "ws": "^8.13.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.48.0",
+    "nodemon": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
 
