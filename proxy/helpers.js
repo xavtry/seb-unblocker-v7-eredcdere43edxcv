@@ -1,46 +1,108 @@
-
 /**
  * helpers.js
  *
- * Utility functions shared across proxy modules.
+ * Collection of utility functions for Seb-Unblocker V7
  * Features:
- *  - delay for throttling
- *  - random user-agent generator
- *  - URL validation and normalization
- *  - safe path resolution
+ *  - URL validation & normalization
+ *  - Random string / ID generator
+ *  - Delay & sleep functions
+ *  - Safe JSON parsing
+ *  - Proxy URL building
+ *  - Cookie parsing helpers
+ *  - Array / object helpers
+ *  - Retry wrappers
  */
 
-const path = require('path');
-const { URL } = require('url');
+const crypto = require('crypto');
+const CONFIG = require('./config');
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function randomUserAgent() {
-  const agents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.7 Safari/605.1.15',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/120.0'
-  ];
-  return agents[Math.floor(Math.random() * agents.length)];
-}
-
-function validateURL(url) {
+function isValidUrl(url) {
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch (e) {
+    const u = new URL(url);
+    return CONFIG.proxy.allowedProtocols.includes(u.protocol);
+  } catch {
     return false;
   }
 }
 
-function safePath(...segments) {
-  const full = path.join(...segments);
-  if (!full.startsWith(path.resolve(__dirname, '..'))) {
-    throw new Error('Unsafe path detected: ' + full);
-  }
-  return full;
+function normalizeUrl(url) {
+  if (!url.startsWith('http')) url = 'https://' + url;
+  return url;
 }
 
-module.exports = { delay, randomUserAgent, validateURL, safePath };
+function generateRandomString(length = 16) {
+  return crypto.randomBytes(length).toString('hex');
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function safeJsonParse(str, fallback = {}) {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
+function buildProxyUrl(targetUrl) {
+  return `/proxy?url=${encodeURIComponent(targetUrl)}`;
+}
+
+function parseCookies(cookieHeader) {
+  const obj = {};
+  if (!cookieHeader) return obj;
+  cookieHeader.split(';').forEach(c => {
+    const [k, v] = c.split('=');
+    if (k && v) obj[k.trim()] = v.trim();
+  });
+  return obj;
+}
+
+function flattenArray(arr) {
+  return arr.reduce((acc, val) => acc.concat(Array.isArray(val) ? flattenArray(val) : val), []);
+}
+
+function retryWrapper(fn, attempts = 3, delay = 500) {
+  return async function (...args) {
+    let lastError;
+    for (let i = 0; i < attempts; i++) {
+      try { return await fn(...args); } catch (err) { lastError = err; await sleep(delay); }
+    }
+    throw lastError;
+  };
+}
+
+function uniqueBy(arr, key) {
+  const seen = new Set();
+  return arr.filter(item => {
+    const val = item[key];
+    if (seen.has(val)) return false;
+    seen.add(val);
+    return true;
+  });
+}
+
+// Advanced logging utility
+function logActivity(type, message, extra = {}) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [${type}] ${message}`, extra);
+}
+
+function safeEval(fn) {
+  try { return fn(); } catch { return null; }
+}
+
+// Future: expand helpers for DOM manipulation, HTML sanitization, caching
+
+module.exports = {
+  isValidUrl,
+  normalizeUrl,
+  generateRandomString,
+  sleep,
+  safeJsonParse,
+  buildProxyUrl,
+  parseCookies,
+  flattenArray,
+  retryWrapper,
+  uniqueBy,
+  logActivity,
+  safeEval
+};
