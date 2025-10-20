@@ -1,1 +1,31 @@
+/* Waves Background */
+.wave {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  border-radius: 45%;
+  opacity: 0.2;
+  animation: waveMove 15s linear infinite;
+  z-index: 1;
+}
+
+.wave:nth-child(1) {
+  background: linear-gradient(120deg,#00ff7f,#003300);
+}
+.wave:nth-child(2) {
+  animation-duration: 20s;
+  opacity: 0.15;
+  background: linear-gradient(120deg,#00ff55,#002200);
+}
+.wave:nth-child(3) {
+  animation-duration: 25s;
+  opacity: 0.1;
+  background: linear-gradient(120deg,#00ff99,#001100);
+}
+
+@keyframes waveMove {
+  0% { transform: translateX(0) translateY(0) rotate(0deg); }
+  50% { transform: translateX(-25%) translateY(10%) rotate(180deg); }
+  100% { transform: translateX(0) translateY(0) rotate(360deg); }
+}
 
