@@ -1,1 +1,11 @@
 
+@font-face {
+  font-family: 'SegoeUIBold';
+  src: url('/fonts/seguisb.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+body {
+  font-family: 'SegoeUIBold', 'Segoe UI', sans-serif;
+}
