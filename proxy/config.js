@@ -1,58 +1,118 @@
-
-
 /**
  * config.js
- *
- * Full proxy configuration.
- * Includes environment variables, caching, Puppeteer options, throttling, logging paths, and security toggles.
+ * 
+ * Central configuration for Seb-Unblocker V7
+ * Features:
+ *  - Proxy limits
+ *  - Allowed/blocked domains
+ *  - Rate limiting
+ *  - Puppeteer options
+ *  - Logging levels
+ *  - Search API keys & settings
+ *  - Session & cookie defaults
  */
 
 const path = require('path');
-const os = require('os');
 
 const CONFIG = {
   server: {
     port: process.env.PORT || 3000,
-    hostname: process.env.HOSTNAME || '0.0.0.0',
-    useHTTPS: process.env.USE_HTTPS === 'true' || false
+    host: process.env.HOST || '0.0.0.0',
+    staticDir: path.join(__dirname, '../public'),
+    viewsDir: path.join(__dirname, '../views')
   },
+
   proxy: {
-    allowExternal: process.env.ALLOW_EXTERNAL !== 'false',
-    maxRedirects: parseInt(process.env.MAX_REDIRECTS) || 5,
-    timeout: parseInt(process.env.PROXY_TIMEOUT) || 15000,
-    puppeteer: {
-      headless: process.env.PUPPETEER_HEADLESS !== 'false',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      defaultViewport: { width: 1280, height: 800 }
-    },
-    rewriteRelativeLinks: true,
-    sanitizeHTML: true,
-    removeBaseTag: true
+    maxConnectionsPerIP: 5,
+    timeout: 15000, // 15 seconds
+    allowedProtocols: ['http:', 'https:'],
+    blockedDomains: [
+      'malware.com',
+      'phishing.net',
+      'evil.site'
+    ],
+    enableCaching: true,
+    cacheTTL: 5 * 60 * 1000, // 5 minutes
+    userAgent: 'Seb-Unblocker-V7/1.0'
   },
-  cache: {
-    enabled: process.env.CACHE_ENABLED !== 'false',
-    maxSizeMB: parseInt(process.env.CACHE_MAX_SIZE_MB) || 512,
-    ttlMinutes: parseInt(process.env.CACHE_TTL_MINUTES) || 60,
-    directory: path.join(__dirname, '..', 'cache')
+
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    timeout: 20000
   },
-  logs: {
-    directory: path.join(__dirname, '..', 'logs'),
-    proxyLog: path.join(__dirname, '..', 'logs', 'proxy.log'),
-    dbLog: path.join(__dirname, '..', 'logs', 'proxyDB.log')
-  },
-  security: {
-    rateLimit: {
-      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW) || 60 * 1000,
-      max: parseInt(process.env.RATE_LIMIT_MAX) || 60
-    },
-    enforceCSP: process.env.ENFORCE_CSP !== 'false',
-    enableXSSProtection: true
-  },
+
   search: {
-    defaultEngine: 'duckduckgo',
-    maxResults: parseInt(process.env.SEARCH_MAX_RESULTS) || 10,
-    rateLimitPerIP: 5
+    api: 'duckduckgo', // future-proof for other APIs
+    maxResults: 10,
+    retryOnFail: 2,
+    timeout: 8000
+  },
+
+  logging: {
+    level: 'info', // info, warning, error
+    logDir: path.join(__dirname, '../logs'),
+    enableWSLogs: true,
+    logToDB: false
+  },
+
+  security: {
+    enableCSP: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self'; frame-src *",
+    rateLimitWindow: 60 * 1000,
+    maxRequestsPerWindow: 20
+  },
+
+  notifications: {
+    adminEmail: process.env.ADMIN_EMAIL || 'admin@seb-unblocker.com',
+    enableThrottle: true,
+    throttleWindow: 60000,
+    throttleLimit: 5
   }
+};
+
+// Utility functions for configs
+CONFIG.isBlockedDomain = (url) => {
+  try {
+    const hostname = new URL(url).hostname;
+    return CONFIG.proxy.blockedDomains.includes(hostname);
+  } catch {
+    return false;
+  }
+};
+
+CONFIG.isProtocolAllowed = (url) => {
+  try {
+    const protocol = new URL(url).protocol;
+    return CONFIG.proxy.allowedProtocols.includes(protocol);
+  } catch {
+    return false;
+  }
+};
+
+CONFIG.getCacheKey = (url) => encodeURIComponent(url);
+
+CONFIG.getPuppeteerOptions = () => CONFIG.puppeteer;
+
+CONFIG.getSearchMaxResults = () => CONFIG.search.maxResults;
+
+CONFIG.getLogLevel = () => CONFIG.logging.level;
+
+CONFIG.getRateLimit = () => ({
+  window: CONFIG.security.rateLimitWindow,
+  max: CONFIG.security.maxRequestsPerWindow
+});
+
+CONFIG.getAdminEmail = () => CONFIG.notifications.adminEmail;
+
+CONFIG.getThrottleSettings = () => ({
+  window: CONFIG.notifications.throttleWindow,
+  limit: CONFIG.notifications.throttleLimit
+});
+
+// Future extension: dynamic config reload from file or DB
+CONFIG.reload = () => {
+  console.log('Reloading config (stub) ...');
 };
 
 module.exports = CONFIG;
