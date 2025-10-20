@@ -1,61 +1,53 @@
 /**
  * proxyMiddleware.js
- *
- * Main middleware to handle proxying requests in Seb-Unblocker V7
- * Features:
- *  - Integrates fetcher, rewrite, puppeteer, cookies, throttler
- *  - Handles errors gracefully
- *  - Supports caching & logging
- *  - Maintains sessions
+ * Handles core middleware for proxy requests, including logging, throttling, headers, and error handling
  */
 
-const { fetchPage } = require('./fetcher');
-const { rewriteHTML } = require('./rewrite');
-const { processIframe } = require('./iframeHandler');
-const { throttleMiddleware } = require('./throttler');
-const { validateRequest } = require('./validator');
-const { handleSetCookieHeader, getCookies } = require('./cookies');
-const { logger } = require('./logger');
-const { renderWithPuppeteer } = require('./puppeteerRender');
-const CONFIG = require('./config');
+const { validateUrl } = require('./validator');
+const { throttleRequest } = require('./throttler');
+const { logRequest } = require('./logger');
+const { sanitizeHeaders } = require('./sanitize');
 
-async function proxyHandler(req, res) {
-  try {
-    // Rate limit
-    await throttleMiddleware(req, res, async () => {});
+module.exports = async function proxyMiddleware(req, res, next) {
+    try {
+        // Step 1: Validate URL query
+        const targetUrl = req.query.url;
+        if (!targetUrl) return res.status(400).send('No URL specified');
+        if (!validateUrl(targetUrl)) return res.status(400).send('Invalid URL');
 
-    // Validate
-    validateRequest(req, res, () => {});
+        // Step 2: Throttle excessive requests
+        const throttleResult = throttleRequest(req.ip, targetUrl);
+        if (!throttleResult.allowed) {
+            return res.status(429).send('Too many requests. Try again later.');
+        }
 
-    const sessionId = req.sessionID || req.ip;
+        // Step 3: Sanitize headers
+        req.headers = sanitizeHeaders(req.headers);
 
-    let targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).send('No URL provided');
+        // Step 4: Log request
+        logRequest(req.ip, targetUrl, req.headers);
 
-    const cookies = getCookies(sessionId);
+        // Step 5: Proxy meta-data injection
+        req.proxyMeta = {
+            startedAt: Date.now(),
+            clientIp: req.ip,
+            userAgent: req.headers['user-agent'] || '',
+        };
 
-    // Decide if Puppeteer needed
-    const usePuppeteer = CONFIG.dynamicSites.some(site => targetUrl.includes(site));
-
-    let html;
-    if (usePuppeteer) {
-      html = await renderWithPuppeteer(targetUrl, cookies);
-    } else {
-      html = await fetchPage(targetUrl, cookies);
+        // Step 6: Continue to next middleware or fetch
+        next();
+    } catch (err) {
+        console.error('Proxy middleware error:', err);
+        res.status(500).send('Internal proxy error');
     }
-
-    // Rewrite links, scripts, CSS, iframes
-    html = rewriteHTML(html, targetUrl);
-    html = await processIframe(html, targetUrl);
-
-    res.send(html);
-  } catch (err) {
-    logger.logError('proxyMiddleware error: ' + err.message);
-    res.status(500).send('Proxy error');
-  }
-}
-
-module.exports = {
-  proxyHandler
 };
 
+// Additional helper functions (future hooks)
+function addSecurityHeaders(res) {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+// We can expand this file to include caching middleware, cookie handling, and more
