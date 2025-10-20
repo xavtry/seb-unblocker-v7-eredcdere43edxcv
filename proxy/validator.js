@@ -1,97 +1,75 @@
 /**
  * validator.js
  *
- * Validates URLs, content, and requests for Seb-Unblocker V7
+ * Validates input, URLs, and user requests
  * Features:
- *  - URL validation and normalization
- *  - Blocklist/allowlist checks
- *  - Prevents XSS & SSRF attempts
- *  - Logs invalid requests
- *  - Can be extended for content type validation
+ *  - URL & protocol checks
+ *  - Blocked domain detection
+ *  - Max URL length
+ *  - Rate-limited requests validation
+ *  - Basic XSS / injection prevention
+ *  - Returns detailed error codes for proxy
+ *  - Advanced sanitization hooks
  */
 
-const { URL } = require('url');
-const { logger } = require('./logger');
+const CONFIG = require('./config');
+const { logInfo, logWarning } = require('./loggerDB');
 
-const BLOCKLIST = [
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '0.0.0.0'
-];
-
-const ALLOW_PROTOCOLS = ['http:', 'https:'];
-
-/**
- * Validate and normalize URL
- */
-function validateURL(input) {
-  try {
-    if (!input) return null;
-
-    let url = input.trim();
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-
-    const parsed = new URL(url);
-
-    // Block local addresses
-    if (BLOCKLIST.includes(parsed.hostname)) {
-      logger.logWarning(`Blocked URL attempt: ${url}`);
-      return null;
-    }
-
-    if (!ALLOW_PROTOCOLS.includes(parsed.protocol)) {
-      logger.logWarning(`Invalid protocol: ${url}`);
-      return null;
-    }
-
-    return parsed.href;
-  } catch (err) {
-    logger.logError(`validateURL error: ${err.message}`);
-    return null;
-  }
+function validateUrl(url) {
+  if (!url) return { valid: false, reason: 'Empty URL' };
+  if (typeof url !== 'string') return { valid: false, reason: 'URL must be a string' };
+  if (url.length > 2048) return { valid: false, reason: 'URL too long' };
+  if (!CONFIG.proxy.allowedProtocols.includes(new URL(url, 'https://dummy').protocol)) return { valid: false, reason: 'Protocol not allowed' };
+  if (CONFIG.isBlockedDomain(url)) return { valid: false, reason: 'Blocked domain' };
+  return { valid: true };
 }
 
-/**
- * Validate HTML content
- */
-function validateHTML(html) {
-  if (!html || typeof html !== 'string') return false;
-
-  // Simple XSS prevention
-  const blacklist = ['<script>', 'onerror=', 'onload='];
-  for (const b of blacklist) {
-    if (html.toLowerCase().includes(b)) return false;
-  }
-  return true;
+function sanitizeInput(str) {
+  if (!str || typeof str !== 'string') return '';
+  // Remove script tags
+  return str.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+            .replace(/on\w+="[\s\S]*?"/gi, '');
 }
 
-/**
- * Check allowed MIME type
- */
-function validateMime(mime) {
-  const allowed = ['text/html', 'application/javascript', 'text/css', 'image/png', 'image/jpeg', 'image/gif'];
-  return allowed.includes(mime);
+function validateSearchQuery(q) {
+  if (!q || typeof q !== 'string') return { valid: false, reason: 'Empty query' };
+  if (q.length > 100) return { valid: false, reason: 'Query too long' };
+  const sanitized = sanitizeInput(q);
+  return { valid: true, sanitized };
 }
 
-/**
- * Middleware for Express
- */
-function validateRequest(req, res, next) {
-  const url = req.query.url || req.body.url;
-  const valid = validateURL(url);
-
-  if (!valid) {
-    return res.status(400).send('Invalid URL');
-  }
-
-  next();
+function validateSession(session) {
+  if (!session || typeof session !== 'object') return { valid: false, reason: 'Invalid session' };
+  if (!session.id) return { valid: false, reason: 'Missing session ID' };
+  if (!session.ip) return { valid: false, reason: 'Missing IP' };
+  return { valid: true };
 }
+
+// Rate limiting per IP/session
+function validateRateLimit(requests, ip) {
+  const { window, max } = CONFIG.getRateLimit();
+  const now = Date.now();
+  requests[ip] = requests[ip] || [];
+  requests[ip] = requests[ip].filter(ts => now - ts < window);
+  if (requests[ip].length >= max) return { valid: false, reason: 'Rate limit exceeded' };
+  requests[ip].push(now);
+  return { valid: true };
+}
+
+// Validate headers
+function validateHeaders(headers) {
+  if (!headers) return { valid: false, reason: 'Missing headers' };
+  if (!headers['user-agent']) return { valid: false, reason: 'Missing User-Agent' };
+  return { valid: true };
+}
+
+// Future: XSS, CSRF, SQLi checks
 
 module.exports = {
-  validateURL,
-  validateHTML,
-  validateMime,
-  validateRequest
+  validateUrl,
+  sanitizeInput,
+  validateSearchQuery,
+  validateSession,
+  validateRateLimit,
+  validateHeaders
 };
-
