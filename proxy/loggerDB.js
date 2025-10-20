@@ -1,67 +1,63 @@
 /**
  * loggerDB.js
- *
- * Handles logging for Seb-Unblocker V7
- * Features:
- *  - Writes logs to files
- *  - Supports different log levels: info, warning, error
- *  - Optionally integrates with database (placeholder)
- *  - Rotates logs daily
- *  - Can retrieve logs by date, level, or IP
+ * Handles persistent logging of proxy requests, errors, and events
+ * Supports writing to file, database, or future analytics
  */
 
 const fs = require('fs');
 const path = require('path');
-const LOG_DIR = path.join(__dirname, '../logs');
-const LOG_FILE = path.join(LOG_DIR, 'proxy.log');
+const logFile = path.join(__dirname, '../logs/proxy.log');
 
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
-
-function timestamp() {
-  return new Date().toISOString();
+function logRequest(ip, url, headers) {
+    const logEntry = {
+        type: 'request',
+        timestamp: new Date().toISOString(),
+        ip,
+        url,
+        headers,
+    };
+    writeLog(logEntry);
 }
 
-function writeLog(level, message) {
-  const line = `[${timestamp()}] [${level.toUpperCase()}] ${message}\n`;
-  fs.appendFileSync(LOG_FILE, line, { encoding: 'utf8' });
+function logError(err, context = {}) {
+    const logEntry = {
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        message: err.message,
+        stack: err.stack,
+        context,
+    };
+    writeLog(logEntry);
 }
 
-function logInfo(message) {
-  writeLog('info', message);
+function logEvent(message, context = {}) {
+    const logEntry = {
+        type: 'event',
+        timestamp: new Date().toISOString(),
+        message,
+        context,
+    };
+    writeLog(logEntry);
 }
 
-function logWarning(message) {
-  writeLog('warning', message);
+function writeLog(entry) {
+    const line = JSON.stringify(entry) + '\n';
+    fs.appendFile(logFile, line, (err) => {
+        if (err) console.error('Failed to write log:', err);
+    });
 }
 
-function logError(message) {
-  writeLog('error', message);
+// Future hooks for DB or analytics
+function queryLogs(filter = {}) {
+    if (!fs.existsSync(logFile)) return [];
+    const data = fs.readFileSync(logFile, 'utf-8');
+    const lines = data.split('\n').filter(Boolean).map(JSON.parse);
+    return lines.filter(log => {
+        for (let key in filter) {
+            if (log[key] !== filter[key]) return false;
+        }
+        return true;
+    });
 }
 
-function getLogs({ level = null, since = null } = {}) {
-  if (!fs.existsSync(LOG_FILE)) return [];
-  const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n').filter(Boolean);
-  let result = lines;
-  if (level) result = result.filter(l => l.includes(`[${level.toUpperCase()}]`));
-  if (since) result = result.filter(l => new Date(l.slice(1, 25)) >= new Date(since));
-  return result;
-}
-
-/**
- * Example placeholder for database logging
- */
-function logToDB(entry) {
-  // Extend here to write to MongoDB, PostgreSQL, etc.
-  // entry: { level, message, timestamp, ip }
-  // For now, just log to console
-  console.log('DB log:', entry);
-}
-
-module.exports = {
-  logInfo,
-  logWarning,
-  logError,
-  getLogs,
-  logToDB
-};
-
+module.exports = { logRequest, logError, logEvent, queryLogs };
